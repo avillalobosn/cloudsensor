@@ -4,4 +4,7 @@
 - [] Chantar GitHub Actions en microservicios
 - [] Dockerizar y hacer Kubernetes
 # Como correrlo
+## sensores
+uvicorn sensores:app --reload
+
 # Microservicios implementados
