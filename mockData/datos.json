@@ -1,0 +1,8 @@
+{
+  "sensor": 1,
+  "contenido": {
+    "temperatura": 23.5,
+    "unidad": "C"
+  }
+}
+
