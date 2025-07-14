@@ -4,8 +4,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+import requests
 from datetime import datetime
 from typing import Any
+import threading
+import time
 
 load_dotenv()
 db_password = os.getenv("db_password")
@@ -16,64 +19,80 @@ uri = f"mongodb+srv://cloud:{db_password}@cluster0.ihveqly.mongodb.net/?retryWri
 client = MongoClient(uri, server_api=ServerApi('1'))
 db = client["Cluster0"]
 #mongo va a crear tales colecciones si no existen
-alerta_collection = db["alerta"]
-datos_collection = db[""]
+alarma_collection = db["alarma"]
 
 #creamos modelos
-class Alerta(BaseModel):
+class Alarma(BaseModel):
     id: int
-    nombre: str
-    estado: str
-
-#class Datos(BaseModel):
-#    sensor: int
-#    contenido: Any
-
-@app.post("/alertas/")
-def createAlerta(alerta: Alerta):
-    if sensor_collection.find_one({"id": sensor.id}):
-        raise HTTPException(status_code = 400, detail="Sensor existe")
-    sensor_collection.insert_one({"id":sensor.id, "nombre":sensor.nombre,"estado":sensor.estado})
-    return {"mensaje":f"Sensor {sensor.nombre} fue creado"}
-
-@app.post("/datos/")
-def createDatoSensor(datos: Datos):
-    if not sensor_collection.find_one({"id": datos.sensor}):
-        raise HTTPException(status_code = 400, detail="Sensor no existe")
-    doc = {
-        "sensor": datos.sensor,
-        "datos": datos.contenido,
-        "timestamp": datetime.utcnow()
-    }
-
-    sensor_collection.insert_one(doc)
-    return {"datos":f"datos creados"}
-
-@app.get("/sensores/{sensor_id}")
-def get_sensor(sensor_id: int):
-    sensor = sensor_collection.find_one({"id": sensor_id}, {"_id": 0})
-    if not sensor:
-        raise HTTPException(status_code=404, detail="Sensor no encontrado")
-    return sensor
-
-@app.get("/datos/{sensor_id}")
-def get_sensor_data(sensor_id: int):
-    if not sensor_collection.find_one({"id": sensor_id}):
-        raise HTTPException(status_code=404, detail="Sensor no encontrado")
+    lugar: str
+    contenido: Any
     
-    datos = list(message_collection.find({"sensor": sensor_id}, {"_id": 0}))
-    return {"sensor_id": sensor_id, "datos": datos}
+def getData(sensor_id: int):
+    url = f"http://127.0.0.1:8001/sensores/{sensor_id}/latest"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        raise Exception(f"Error getting sensor: {response.status_code}")
 
-@app.delete("/sensores/{sensor_id}")
-def delete_sensor(sensor_id: int):
-    result = sensor_collection.delete_one({"id": sensor_id})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Sensor no encontrado")
+TEMPERATURE_THRESHOLD = 69.0
 
-# Send a ping to confirm a successful connection
+def processData():
+    print("🔍 Checking sensor data for alarms...")
+    response = requests.get(f"http://127.0.0.1:8001/sensores/")
+    response.raise_for_status()
+    sensores = response.json()
+    for sensor_id in sensores:  # Check up to 100 sensors
+        try:
+            data = getData(sensor_id)
+            value = data.get("value")
+            unit = data.get("unit", "C")
+            timestamp = data.get("timestamp")
+
+            if value is None:
+                continue
+
+            # Only check temperature values
+            if unit.upper() == "C" and value > TEMPERATURE_THRESHOLD:
+                print(f"🚨 Alarm condition met for sensor {sensor_id}: {value}°C")
+
+                payload = {
+                    "id": sensor_id,  # same ID ensures one alarm per sensor
+                    "lugar": f"Sensor {sensor_id}",
+                    "contenido": {
+                        "mensaje": "Temperatura crítica",
+                        "valor": value,
+                        "unidad": unit,
+                        "timestamp": timestamp
+                    }
+                }
+
+                response = alarma_collection.insert_one(payload)
+
+                if response.status_code == 200:
+                    print(f"✅ Alarm created for sensor {sensor_id}")
+                elif response.status_code == 400 and "Alarma ya existe" in response.text:
+                    print(f"⚠️ Alarm already exists for sensor {sensor_id}")
+                else:
+                    print(f"❌ Unexpected error: {response.status_code} - {response.text}")
+
+        except Exception as e:
+            continue
+
 try:
     print("pingeando")
     client.admin.command('ping')
     print("Pinged your deployment. You successfully connected to MongoDB!")
 except Exception as e:
     print(e)
+
+def schedule_processing():
+    while True:
+        try:
+            processData()
+        except Exception as e:
+            print(f"Error in processing loop: {e}")
+        time.sleep(10)
+
+# Start in background
+threading.Thread(target=schedule_processing, daemon=True).start()

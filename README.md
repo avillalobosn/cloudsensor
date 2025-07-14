@@ -5,6 +5,17 @@
 - [] Dockerizar y hacer Kubernetes
 # Como correrlo
 ## sensores
-uvicorn sensores:app --reload
+cd sensor_service
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn sensores:app --reload --port 8000
+
+## anti corruption layer
+cd ACL_service
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn ACL:app reload --port 8001
 
 # Microservicios implementados

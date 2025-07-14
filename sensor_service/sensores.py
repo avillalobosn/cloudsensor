@@ -46,8 +46,13 @@ def createDatoSensor(datos: Datos):
         "timestamp": datetime.utcnow()
     }
 
-    sensor_collection.insert_one(doc)
+    datos_collection.insert_one(doc)
     return {"datos":f"datos creados"}
+
+@app.get("/sensores/")
+def get_all_sensors():
+    sensores = list(sensor_collection.find({}, {"_id": 0}))
+    return {"sensores": sensores}
 
 @app.get("/sensores/{sensor_id}")
 def get_sensor(sensor_id: int):
@@ -61,7 +66,7 @@ def get_sensor_data(sensor_id: int):
     if not sensor_collection.find_one({"id": sensor_id}):
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
     
-    datos = list(message_collection.find({"sensor": sensor_id}, {"_id": 0}))
+    datos = list(datos_collection.find({"sensor": sensor_id}, {"_id": 0}))
     return {"sensor_id": sensor_id, "datos": datos}
 
 @app.delete("/sensores/{sensor_id}")
