@@ -11,15 +11,12 @@ import threading
 import time
 
 load_dotenv()
-db_password = os.getenv("db_password")
-app = FastAPI()
-uri = f"mongodb+srv://cloud:{db_password}@cluster0.ihveqly.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
-# Create a new client and connect to the server
-client = MongoClient(uri, server_api=ServerApi('1'))
-db = client["Cluster0"]
-#mongo va a crear tales colecciones si no existen
-alarma_collection = db["alarma"]
+db_password = os.getenv("db_password")
+ACL_SERVICE_URL = os.getenv("ACL_SERVICE_URL")
+ALARMAS_SERVICE_URL = os.getenv("ALARMAS_SERVICE_URL")
+
+app = FastAPI()
 
 #creamos modelos
 class Alarma(BaseModel):
@@ -28,7 +25,7 @@ class Alarma(BaseModel):
     contenido: Any
     
 def getData(sensor_id: int):
-    url = f"http://127.0.0.1:8001/sensores/{sensor_id}/latest"
+    url = f"{ACL_SERVICE_URL}/sensores/{sensor_id}/latest"
     response = requests.get(url)
     if response.status_code == 200:
         return response.json()
@@ -39,7 +36,7 @@ TEMPERATURE_THRESHOLD = 69.0
 
 def processData():
     print("🔍 Checking sensor data for alarms...")
-    response = requests.get(f"http://127.0.0.1:8001/sensores/")
+    response = requests.get(f"{ACL_SERVICE_URL}/sensores/")
     response.raise_for_status()
     sensores = response.json()
     for sensor_id in sensores:  # Check up to 100 sensors
@@ -48,43 +45,50 @@ def processData():
             value = data.get("value")
             unit = data.get("unit", "C")
             timestamp = data.get("timestamp")
+            metadata = data.get("metadata", {})
 
             if value is None:
                 continue
 
-            # Only check temperature values
-            if unit.upper() == "C" and value > TEMPERATURE_THRESHOLD:
-                print(f"🚨 Alarm condition met for sensor {sensor_id}: {value}°C")
+            # Check for critical temperature
+            is_temp_alarm = unit.upper() == "C" and value > TEMPERATURE_THRESHOLD
 
-                payload = {
-                    "id": sensor_id,  # same ID ensures one alarm per sensor
-                    "lugar": f"Sensor {sensor_id}",
-                    "contenido": {
-                        "mensaje": "Temperatura crítica",
-                        "valor": value,
-                        "unidad": unit,
-                        "timestamp": timestamp
-                    }
+            # Check for alien detection
+            is_alien_detected = metadata.get("Alien") is True
+
+            if is_temp_alarm or is_alien_detected:
+                print(f"🚨 Alarm triggered for sensor {sensor_id}")
+
+                contenido = {
+                    "mensaje": "Temperatura crítica" if is_temp_alarm else "ALIEN DETECTADO EN EL AREA CODE RED",
+                    "valor": value,
+                    "unidad": unit,
+                    "timestamp": timestamp,
+                    "metadata": metadata
                 }
 
-                response = alarma_collection.insert_one(payload)
+                payload = {
+                    "id": sensor_id,
+                    "lugar": f"Sensor {sensor_id}",
+                    "contenido": contenido
+                }
 
-                if response.status_code == 200:
+                alarm_response = requests.post(f"{ALARMAS_SERVICE_URL}/alarmas/", json=payload)
+
+                if alarm_response.status_code == 200:
                     print(f"✅ Alarm created for sensor {sensor_id}")
-                elif response.status_code == 400 and "Alarma ya existe" in response.text:
+                elif alarm_response.status_code == 400 and "Alarma ya existe" in alarm_response.text:
                     print(f"⚠️ Alarm already exists for sensor {sensor_id}")
                 else:
-                    print(f"❌ Unexpected error: {response.status_code} - {response.text}")
+                    print(f"❌ Error {alarm_response.status_code}: {alarm_response.text}")
+
+                # You likely need to remove this response.status_code logic
+                # because insert_one returns an InsertOneResult, not a response object.
+                print(f"✅ Alarm created for sensor {sensor_id}")
 
         except Exception as e:
+            print(f"❌ Error processing sensor {sensor_id}: {e}")
             continue
-
-try:
-    print("pingeando")
-    client.admin.command('ping')
-    print("Pinged your deployment. You successfully connected to MongoDB!")
-except Exception as e:
-    print(e)
 
 def schedule_processing():
     while True:

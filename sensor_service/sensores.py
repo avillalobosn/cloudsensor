@@ -43,7 +43,7 @@ def createDatoSensor(datos: Datos):
     doc = {
         "sensor": datos.sensor,
         "datos": datos.contenido,
-        "timestamp": datetime.utcnow()
+        "timestamp": datetime.now()
     }
 
     datos_collection.insert_one(doc)

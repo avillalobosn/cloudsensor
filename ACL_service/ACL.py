@@ -40,7 +40,8 @@ def transform_reading(sensor_id: int, raw: dict) -> dict:
         "device_id": sensor_id,
         "value": value,
         "unit": unit,
-        "timestamp": timestamp
+        "timestamp": timestamp,
+        "metadata": contenido
     }
 
 @app.get("/readings/latest")
