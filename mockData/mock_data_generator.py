@@ -15,10 +15,14 @@ SENSOR_TYPES = [
 SENSORS = []
 NEXT_SENSOR_ID = 1
 SENSOR_SPAWN_INTERVAL = 30  # Seconds
-DATA_SEND_INTERVAL = 1      # Seconds per sensor
+DATA_SEND_INTERVAL = 5      # Seconds per sensor
+MAX_SENSORS = 3  # or any number you prefer
 
 def create_sensor():
     global NEXT_SENSOR_ID
+
+    if NEXT_SENSOR_ID > MAX_SENSORS:
+        return  # ✅ Do not create more sensors
 
     config = random.choice(SENSOR_TYPES)
     sensor = {
@@ -36,7 +40,7 @@ def create_sensor():
         "estado": sensor["estado"]
     })
 
-    if response.status_code == 200 and NEXT_SENSOR_ID < 9:
+    if response.status_code == 200:
         print(f"🆕 Sensor created: {sensor['nombre']}")
         SENSORS.append(sensor)
         NEXT_SENSOR_ID += 1
