@@ -7,10 +7,14 @@ from fastapi.responses import JSONResponse
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import requests
+from enviar_correo import send_email
+import webbrowser
 
 load_dotenv()
 
 db_password = os.getenv("db_password")
+EMAIL_ADDRESS = os.getenv("email_address")
+EMAIL_PASSWORD = os.getenv("email_password")
 
 app = FastAPI()
 uri = f"mongodb+srv://cloud:{db_password}@cluster0.ihveqly.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
@@ -54,7 +58,13 @@ def crear_alarma(alarma: Alarma):
     #alarma_collection.insert_one(alarma)
     # Optional: Trigger additional actions like:
     # - Send email/SMS
+    subject = f"ALIEN DETECTADO POR SENSOR {sensor_id}"
+    body = f"Hola!\n\n AYUDA VIENEN LOS ALIENS AAAAAAAAAAAAAAA ACTIVEN LAS ALARMAS LOS ESCUDOS NO DEJEN QUE VENGAN POR MI KILO DE VRAM \n\n Saludos!"
+    to_email = f"ivan.carrasco@estudiantes.uv.cl"
+    send_email(subject, body, to_email, EMAIL_ADDRESS, EMAIL_PASSWORD)
     # - Open a browser tab
+    url = "https://www.youtube.com/watch?v=p_khWy7GAcQ"
+    webbrowser.open_new_tab(url) 
     # - Notify another service
     
 
